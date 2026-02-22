@@ -58,6 +58,7 @@ python test_main.py --seed 0 --method buffer --gpu 0 --store_traj_num 10 --use_t
 | `--env` | `metaworld_sequence_set6` | Sequence of 6 tasks |
 | | `metaworld_sequence_set12` | Sequence of 12 tasks |
 | | `metaworld_sequence_set18` | Sequence of 18 tasks |
+| | `metaworld_sequence_set22` | Sequence of CW10 |
 
 ---
 
