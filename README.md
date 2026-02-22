@@ -1,6 +1,15 @@
 # FAME
 Official Implementation of Principled Fast and Meta Knowledge Learners for Continual Reinforcement Learning (ICLR 2026))
 
+## Installation
+
+To set up the environment, please run the following command:
+
+```bash
+pip install -r Metaworld/requirements.txt
+```
+
+**Note:** The requirements file includes `mujoco` and `metaworld`. Please ensure you have the necessary system dependencies for MuJoCo installed.
 
 # MiniAar: we adapte the implementation from https://github.com/NishanthVAnand/prediction-and-control-in-continual-reinforcement-learning/tree/main  (NeurIPS 2021)
 
@@ -26,39 +35,56 @@ python random_act.py --save --seed=$s --seq 3
 python CF.py --lr1=1e-3 --lr2=1e-5 --size_fast2meta 12000 --detection_step 1200 --seed=1 --save --save-model --seq 1 --gpu 0 --policy 1 --warmstep 50000  --lambda_reg 1.0 
 ```
 
-# MetaWorld: the code is based on "Parseval Regularization for Continual Reinforcement Learning"
+# MetaWorld Experiments
 
+## 1. Running FAME & Standard Baselines
 
-## How to Run
-```
+To run the main experiments using FAME and standard baselines (Reset, Average, Finetune), use the following command:
+
+```bash
 python test_main.py --seed 0 --method buffer --gpu 0 --store_traj_num 10 --use_ttest 1 --env metaworld_sequence_set18
 ```
 
-## Parameters Meaning
+### Arguments Reference
 
-### --method
-- buffer: FAME-KL
-- buffer_wd: FAME-MD
-- independent: Reset
-- average: Average
-- continue: Finetune
+| Argument | Value | Description |
+| :--- | :--- | :--- |
+| `--method` | `buffer` | **FAME-KL** (Our method) |
+| | `buffer_wd` | **FAME-MD** (Our method variant) |
+| | `independent` | **Reset** (Baseline: Train from scratch) |
+| | `average` | **Average** (Baseline: Parameter averaging) |
+| | `continue` | **Finetune** (Baseline: Continual learning without regularization) |
+| `--env` | `metaworld_sequence_set6` | Sequence of 6 tasks |
+| | `metaworld_sequence_set12` | Sequence of 12 tasks |
+| | `metaworld_sequence_set18` | Sequence of 18 tasks |
 
-### --env
-- metaworld_sequence_set6 / metaworld_sequence_set12 / metaworld_sequence_set18
+---
 
-### Baselines: PackNet, ProgressiveNet and CompoNet
+## 2. Running Advanced Baselines (PackNet, ProgressiveNet, CompoNet)
 
-cd to the baselines' code directory (Metaworld/baselines_packnet_progressivenet_componet/experiments/meta-world) and run the following command to run the baselines. Note that you need to run the code with --algorithm simple first to get the first task's model, which will be used for the other baselines.
+These baselines are located in a separate directory.
 
-```
-python run_experiments.py --algorithm simple --seed 0 --start-mode 0 --task-sequence 6
-```
+### Prerequisites
+**Important:** You must first run the `simple` algorithm (SAC) to generate the initial model for the first task, which is required by other baselines.
 
-## Parameters Meaning
-### --algorithm
+### Execution Steps
 
-- simple: SAC
-- packnet: PackNet
-- prognet: ProgressiveNet
-- componet: CompoNet
+1. Navigate to the experiment directory:
+   ```bash
+   cd Metaworld/baselines_packnet_progressivenet_componet/experiments/meta-world
+   ```
+
+2. Run the experiment:
+   ```bash
+   python run_experiments.py --algorithm simple --seed 0 --start-mode 0 --task-sequence 6
+   ```
+
+### Arguments Reference
+
+| Argument | Value | Description |
+| :--- | :--- | :--- |
+| `--algorithm` | `simple` | **SAC** (Standard Soft Actor-Critic) |
+| | `packnet` | **PackNet** |
+| | `prognet` | **ProgressiveNet** |
+| | `componet` | **CompoNet** |
 
