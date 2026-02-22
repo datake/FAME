@@ -1,16 +1,6 @@
 # FAME
 Official Implementation of Principled Fast and Meta Knowledge Learners for Continual Reinforcement Learning (ICLR 2026))
 
-## Installation
-
-To set up the environment, please run the following command:
-
-```bash
-pip install -r Metaworld/requirements.txt
-```
-
-**Note:** The requirements file includes `mujoco` and `metaworld`. Please ensure you have the necessary system dependencies for MuJoCo installed.
-
 # MiniAar: we adapte the implementation from https://github.com/NishanthVAnand/prediction-and-control-in-continual-reinforcement-learning/tree/main  (NeurIPS 2021)
 
 
@@ -36,6 +26,17 @@ python CF.py --lr1=1e-3 --lr2=1e-5 --size_fast2meta 12000 --detection_step 1200 
 ```
 
 # MetaWorld Experiments
+
+## Installation
+
+To set up the environment, please run the following command:
+
+```bash
+pip install -r Metaworld/requirements.txt
+```
+
+**Note:** The requirements file includes `mujoco` and `metaworld`. Please ensure you have the necessary system dependencies for MuJoCo installed.
+
 
 ## 1. Running FAME & Standard Baselines
 
