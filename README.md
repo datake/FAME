@@ -182,10 +182,6 @@ These baselines are located in a separate directory.
 | | `componet` | **CompoNet** |
 
 
-## Contact
-
-Please contact ksun6@ualberta.ca if you have any questions.
-
 ## Reference
 Please cite our paper if you use our implementation in your research:
 ```
