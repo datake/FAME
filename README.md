@@ -114,7 +114,7 @@ python process_results.py # from csv to CRL-relavant metrics
 
 ## Acknowledgement
 
-This implementation in MinAtar is adapted from [the released code](https://github.com/mikelma/componet) of the paper [Self-composing policies for scalable continual reinforcement learning](https://arxiv.org/abs/2506.14811) (ICML 2024). 
+This implementation in Atari is adapted from [the released code](https://github.com/mikelma/componet) of the paper [Self-composing policies for scalable continual reinforcement learning](https://arxiv.org/abs/2506.14811) (ICML 2024). 
 
 
 
