@@ -12,9 +12,7 @@ This repository contains the Pytorch implementation of our FAME continual RL alg
 ## Environmental Setup 
 
 ```bash
-# python=3.10
-cd MinAtar
-pip install -r requirements.txt
+pip install -r MinAtar/requirements.txt # python=3.10
 ```
 
 
@@ -46,6 +44,7 @@ python PT_DQN_half.py --lr1=1e-8 --lr2=1e-4 --decay=0.75 --seed=0 --save --save-
 | `warmstep` | `50000` | L: Warm-up step with behevior cloning |
 | `detection_step` | `1200` | n: number of steps for policy evaluation |
 | `lambda_reg` | `1.0` | Regularization hyperparameter in behavior cloning |
+| `use_ttest` | `0` | 0: empirical ranking, 1: t-test for one-vs-all hypothesis test |
 ---
 
 ```
@@ -73,20 +72,49 @@ This implementation in MinAtar is adapted from [the released code](https://githu
 ## Environmental Setup
 
 ```bash
-cd Atari
-pip install -r requirements.txt
+pip install -r Atari/requirements.txt
 ```
 
-## Run the Code
+## Baselines: 
+
+| Argument | Value | Description |
+| :--- | :--- | :--- |
+| `--algorithm` | `from-scratch` | Reset|
+| | `finetune` | Finetune |
+| | `packnet` | Packnet |
+| | `prog-net` | ProgressiveNet |
+| `--env` | `ALE/SpaceInvaders-v5` | Sequence in Spaceinvader |
+| | `ALE/Freeway-v5` | Sequence in Freeway |
+---
 
 ```
-python3 run_ppo_FAME.py --model-type=FAME --env-id=ALE/Freeway-v5 --seed=0 --save-dir=agents --total-timesteps=1000000 --epoch_meta 200
-python3 run_ppo_FAME.py --model-type=FAME --env-id=ALE/SpaceInvaders-v5 --seed=0 --save-dir=agents --total-timesteps=1000000 --epoch_meta 200
+# example: packnet
+python run_experiments.py --algorithm packnet --env ALE/SpaceInvaders-v5 --seed 1 --start-mode 0
 ```
+
+
+## Our FAME Approach
+
+We use a set of default hyper-parameters without sweeping them, but it already suggests the superiority in the performance.
+
+In the original code, we run `run_experiments.py` to conduct all baselines algorithms. A straightforward application of this implementation logic to FAME is not applicable as the meta buffer will require the huge memory resources. Therefore, we modify the implementation log and run the FAME algorithm via `run_ppo_FAME.py`.
+
+```
+python run_ppo_FAME.py --model-type=FAME --env-id=ALE/Freeway-v5 --seed=0 --save-dir=agents --total-timesteps=1000000 --epoch_meta 200
+python run_ppo_FAME.py --model-type=FAME --env-id=ALE/SpaceInvaders-v5 --seed=0 --save-dir=agents --total-timesteps=1000000 --epoch_meta 200
+```
+
+## Evaluation
+
+```
+python process_results_pre.py # from event data to csv
+python process_results.py # from csv to CRL-relavant metrics
+```
+
 
 ## Acknowledgement
 
-This implementation in MinAtar is adapted from [the released code](https://github.com/mikelma/componet) of the paper [Self-composing policies for scalable continual reinforcement learning](https://arxiv.org/abs/2506.14811) (ICML 2024).
+This implementation in MinAtar is adapted from [the released code](https://github.com/mikelma/componet) of the paper [Self-composing policies for scalable continual reinforcement learning](https://arxiv.org/abs/2506.14811) (ICML 2024). 
 
 
 
@@ -95,8 +123,7 @@ This implementation in MinAtar is adapted from [the released code](https://githu
 ## Environmental Setup
 
 ```bash
-cd Metaworld
-pip install -r requirements.txt
+pip install -r Metaworld/requirements.txt
 ```
 
 **Note:** The requirements file includes `mujoco` and `metaworld`. Please ensure you have the necessary system dependencies for MuJoCo installed.

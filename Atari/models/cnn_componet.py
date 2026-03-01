@@ -9,6 +9,7 @@ import sys, os
 sys.path.append(os.path.dirname(__file__) + "/../../../")
 from componet import CompoNet, FirstModuleWrapper
 
+# from componet.impl import CompoNet, FirstModuleWrapper
 
 def layer_init(layer, std=np.sqrt(2), bias_const=0.0):
     torch.nn.init.orthogonal_(layer.weight, std)
@@ -79,6 +80,7 @@ class CnnCompoNetAgent(nn.Module):
                 prevs_to_noise=prevs_to_noise,
             )
 
+            ########## attention mechanism ##########
             with torch.no_grad():
                 # log attention values
                 for i, v in enumerate(att_in.mean(0)[0].detach()):
@@ -128,7 +130,7 @@ class CnnCompoNetAgent(nn.Module):
         )
         model.encoder = torch.load(f"{dirname}/encoder.pt", map_location=map_location)
 
-        # load the state dict of the actor
+        # load the state dict of the actor within a loop
         actor = torch.load(f"{dirname}/actor.pt", map_location=map_location)
         curr = model.actor.state_dict()
         other = actor.state_dict()

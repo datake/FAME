@@ -54,7 +54,8 @@ class PackNetAgent(nn.Module):
         freeze_bias=True,
         map_location=None,
     ):
-        model = torch.load(f"{dirname}/packnet.pt", map_location=map_location)
+        # model = torch.load(f"{dirname}/packnet.pt", map_location=map_location)
+        model = torch.load(f"{dirname}/packnet.pt", map_location=map_location, weights_only=False)
         model.retrain_mode = False
 
         if task_id is not None:
@@ -75,10 +76,9 @@ class PackNetAgent(nn.Module):
             return  # nothing to do
 
         print("==> PackNet re-training starts!")
-
         self.retrain_mode = True
         self.network.prune()  # generate the masks for the current task
-        self.network.set_view(self.network.task_id)
+        self.network.set_view(self.network.task_id) # freeze the current task parameters, and only free the remaining weights
 
     def before_update(self):
         self.network.adjust_gradients(retrain_mode=self.retrain_mode)
@@ -155,6 +155,7 @@ class PackNet(nn.Module):
 
     @torch.no_grad()
     def set_view(self, task_id):
+
         if task_id is None and self.view is not None:
             # restore the original state of the model in the free parameters (not masked)
             for param_copy, param, mask in zip(

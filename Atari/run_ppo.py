@@ -11,6 +11,8 @@ import torch.optim as optim
 import tyro
 from typing import Literal, Tuple, Optional
 import pathlib
+from tqdm import tqdm
+
 
 from torch.utils.tensorboard import SummaryWriter
 
@@ -28,6 +30,7 @@ from models import (
     CnnCompoNetAgent,
     ProgressiveNetAgent,
     PackNetAgent,
+    FAMEAgent,
 )
 
 
@@ -41,19 +44,21 @@ class Args:
         "cnn-componet",
         "prog-net",
         "packnet",
-    ]
+        "FAME",
+    ] = 'packnet'
     """The name of the model to use as agent."""
     dino_size: Literal["s", "b", "l", "g"] = "s"
     """Size of the dino model (only needed when using dino)"""
+
     save_dir: str = None
     """Directory where the trained model will be saved. If not provided, the model won't be saved"""
     prev_units: Tuple[pathlib.Path, ...] = ()
     """Paths to the previous models. Only used when employing a CompoNet or cnn-simple-ft (finetune) agent"""
-    mode: int = None
+    mode: int = 0
     """Playing mode for the Atari game. The default mode is used if not provided"""
     componet_finetune_encoder: bool = False
     """Whether to train the CompoNet's encoder from scratch of finetune it from the encoder of the previous task"""
-    total_task_num: Optional[int] = None
+    total_task_num: Optional[int] = 10
     """Total number of tasks, required when using PackNet"""
     prevs_to_noise: Optional[int] = 0
     """Number of previous policies to set to randomly selected distributions, only valid when model_type is `cnn-componet`"""
@@ -77,9 +82,9 @@ class Args:
     """whether to capture videos of the agent performances (check out `videos` folder)"""
 
     # Algorithm specific arguments
-    env_id: str = "BreakoutNoFrameskip-v4"
+    env_id: str =   "BreakoutNoFrameskip-v4" # "ALE/SpaceInvaders-v5"
     """the id of the environment"""
-    total_timesteps: int = int(1e6)
+    total_timesteps: int = int(1e3) #
     """total timesteps of the experiments"""
     learning_rate: float = 2.5e-4
     """the learning rate of the optimizer"""
@@ -153,12 +158,13 @@ def make_env(env_id, idx, capture_video, run_name, mode=None, dino=False):
 
 if __name__ == "__main__":
     args = tyro.cli(Args)
-    args.batch_size = int(args.num_envs * args.num_steps)
+    # freeway: 7 modes; SpaceInvaders: 10 modes
+    args.batch_size = int(args.num_envs * args.num_steps) # 8*128=1024
     args.minibatch_size = int(args.batch_size // args.num_minibatches)
-    args.num_iterations = args.total_timesteps // args.batch_size
+    args.num_iterations = args.total_timesteps // args.batch_size # 1e6 / 1024 = 976
     m = f"_{args.mode}" if args.mode is not None else ""
     run_name = f"{args.env_id.replace('/', '-')}{m}__{args.model_type}__{args.exp_name}__{args.seed}"
-    print("*** Run's name:", run_name)
+    print("*** Run's name:", run_name) # e.g., *** Run's name: ALE-Freeway-v5_0__packnet__run_ppo__1
     if args.track:
         import wandb
 
@@ -201,8 +207,13 @@ if __name__ == "__main__":
     ), "only discrete action space is supported"
 
     print(f"*** Model: {args.model_type} ***")
+
+
+    ########################## different method ########################
+    # baseline: train from scratch
     if args.model_type == "cnn-simple":
         agent = CnnSimpleAgent(envs).to(device)
+    # Finetune: load the previous model
     elif args.model_type == "cnn-simple-ft":
         if len(args.prev_units) > 0:
             agent = CnnSimpleAgent.load(
@@ -210,10 +221,12 @@ if __name__ == "__main__":
             ).to(device)
         else:
             agent = CnnSimpleAgent(envs).to(device)
+    # Finetune N
     elif args.model_type == "dino-simple":
         agent = DinoSimpleAgent(
             envs, dino_size=args.dino_size, frame_stack=4, device=device
         ).to(device)
+    # CompoNet: load the previous modules
     elif args.model_type == "cnn-componet":
         agent = CnnCompoNetAgent(
             envs,
@@ -221,19 +234,18 @@ if __name__ == "__main__":
             finetune_encoder=args.componet_finetune_encoder,
             map_location=device,
         ).to(device)
+    # ProgressiveNet: load the previous modules
     elif args.model_type == "prog-net":
         agent = ProgressiveNetAgent(
             envs, prevs_paths=args.prev_units, map_location=device
         ).to(device)
-
+    # Packnet
     elif args.model_type == "packnet":
         # retraining in 20% of the total timesteps
         packnet_retrain_start = args.total_timesteps - int(args.total_timesteps * 0.2)
-
         if args.total_task_num is None:
             print("CLI argument `total_task_num` is required when using PackNet.")
             quit(1)
-
         if len(args.prev_units) == 0:
             agent = PackNetAgent(
                 envs,
@@ -248,13 +260,27 @@ if __name__ == "__main__":
                 restart_actor_critic=True,
                 freeze_bias=True,
             ).to(device)
+
+    # FAME:
+    elif args.model_type == "FAME":
+
+        agent = FAMEAgent(
+            envs,
+            prevs_paths=args.prev_units,
+            finetune_encoder=args.componet_finetune_encoder,
+            map_location=device,
+            prevs_to_noise=args.prevs_to_noise,
+        ).to(device)
+
+
+
     else:
         print(f"Model type {args.model_type} is not valid.")
         quit(1)
 
     optimizer = optim.Adam(agent.parameters(), lr=args.learning_rate, eps=1e-5)
 
-    # ALGO Logic: Storage setup
+    # ALGO Logic: rollout buffer
     obs = torch.zeros(
         (args.num_steps, args.num_envs) + envs.single_observation_space.shape
     ).to(device)
@@ -273,13 +299,20 @@ if __name__ == "__main__":
     next_obs = torch.Tensor(next_obs).to(device)
     next_done = torch.zeros(args.num_envs).to(device)
 
-    for iteration in range(1, args.num_iterations + 1):
+    for iteration in tqdm(range(1, args.num_iterations + 1)):
+        """
+        each interation includes:
+            1. a rollout out across args.num_steps steps
+            2. GAE (Generalized Advantage Estimation) to compute the advantages
+            3. optimization of the policy and value networks across args.update_epochs epochs
+        """
         # Annealing the rate if instructed to do so.
         if args.anneal_lr:
             frac = 1.0 - (iteration - 1.0) / args.num_iterations
             lrnow = frac * args.learning_rate
             optimizer.param_groups[0]["lr"] = lrnow
 
+        # for rollout steps
         for step in range(0, args.num_steps):
             global_step += args.num_envs
             obs[step] = next_obs
@@ -303,6 +336,7 @@ if __name__ == "__main__":
                         next_obs / 255.0, prevs_to_noise=args.prevs_to_noise
                     )
                 else:
+                    # action, logprob entroy, critic value
                     action, logprob, _, value = agent.get_action_and_value(
                         next_obs / 255.0
                     )
@@ -317,16 +351,16 @@ if __name__ == "__main__":
             )
             next_done = np.logical_or(terminations, truncations)
             rewards[step] = torch.tensor(reward).to(device).view(-1)
-            next_obs, next_done = torch.Tensor(next_obs).to(device), torch.Tensor(
-                next_done
-            ).to(device)
+            next_obs, next_done = torch.Tensor(next_obs).to(device), torch.Tensor(next_done).to(device)
 
+
+            ####### printing the log info
             if "final_info" in infos:
                 for info in infos["final_info"]:
                     if info and "episode" in info:
-                        print(
-                            f"global_step={global_step}, episodic_return={info['episode']['r']}"
-                        )
+                        # print(
+                        #     f"global_step={global_step}, episodic_return={info['episode']['r']}", time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(info["elapsed_time"]))
+                        # )
                         writer.add_scalar(
                             "charts/episodic_return", info["episode"]["r"], global_step
                         )
@@ -339,6 +373,7 @@ if __name__ == "__main__":
             next_value = agent.get_value(next_obs / 255.0).reshape(1, -1)
             advantages = torch.zeros_like(rewards).to(device)
             lastgaelam = 0
+            ### General Advantage Estimation
             for t in reversed(range(args.num_steps)):
                 if t == args.num_steps - 1:
                     nextnonterminal = 1.0 - next_done
@@ -346,12 +381,8 @@ if __name__ == "__main__":
                 else:
                     nextnonterminal = 1.0 - dones[t + 1]
                     nextvalues = values[t + 1]
-                delta = (
-                    rewards[t] + args.gamma * nextvalues * nextnonterminal - values[t]
-                )
-                advantages[t] = lastgaelam = (
-                    delta + args.gamma * args.gae_lambda * nextnonterminal * lastgaelam
-                )
+                delta = (rewards[t] + args.gamma * nextvalues * nextnonterminal - values[t])
+                advantages[t] = lastgaelam = (delta + args.gamma * args.gae_lambda * nextnonterminal * lastgaelam)
             returns = advantages + values
 
         # flatten the batch
@@ -365,7 +396,7 @@ if __name__ == "__main__":
         # Optimizing the policy and value network
         b_inds = np.arange(args.batch_size)
         clipfracs = []
-        for epoch in range(args.update_epochs):
+        for epoch in range(args.update_epochs): # default: 4
             np.random.shuffle(b_inds)
             for start in range(0, args.batch_size, args.minibatch_size):
                 end = start + args.minibatch_size
@@ -398,7 +429,7 @@ if __name__ == "__main__":
                         mb_advantages.std() + 1e-8
                     )
 
-                # Policy loss
+                # Policy loss: clipping loss and then max
                 pg_loss1 = -mb_advantages * ratio
                 pg_loss2 = -mb_advantages * torch.clamp(
                     ratio, 1 - args.clip_coef, 1 + args.clip_coef
@@ -450,7 +481,7 @@ if __name__ == "__main__":
         writer.add_scalar("losses/approx_kl", approx_kl.item(), global_step)
         writer.add_scalar("losses/clipfrac", np.mean(clipfracs), global_step)
         writer.add_scalar("losses/explained_variance", explained_var, global_step)
-        print("SPS:", int(global_step / (time.time() - start_time)))
+        # print("SPS:", int(global_step / (time.time() - start_time)))
         writer.add_scalar(
             "charts/SPS", int(global_step / (time.time() - start_time)), global_step
         )
@@ -460,4 +491,4 @@ if __name__ == "__main__":
 
     if args.save_dir is not None:
         print(f"Saving trained agent in `{args.save_dir}` with name `{run_name}`")
-        agent.save(dirname=f"{args.save_dir}/{run_name}")
+        agent.save(dirname=f"{args.save_dir}/{run_name}") # e.g, ALE-Freeway-v5_{mode}__packnet__run_ppo__{seed}

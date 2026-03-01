@@ -6,15 +6,58 @@ import pathlib
 import argparse
 from tabulate import tabulate
 import sys, os
-
+import matplotlib.pyplot as plt
+import matplotlib
+import colormaps as cmaps
 sys.path.append("../../")
-from utils import style
+# from utils import style
+
+
+def style(fig, ax=None, grid=True, legend=True, legend_title=None, legend_ncols=1, force_sci_x=False, force_sci_y=False, font=3, colormap=cmaps.greenorange_12, legend_shrink=0.1, ax_math_ticklabels=True, y_spine=False):
+    if colormap is not None:
+        plt.set_cmap(colormap)
+
+    # remove lateral spines
+    ax = ax if ax is not None else plt.gca()
+
+    ax.spines['right'].set_visible(False)
+    ax.spines['top'].set_visible(False)
+    ax.spines['left'].set_visible(y_spine)
+    if ax_math_ticklabels:
+        ax.ticklabel_format(useMathText=True)
+
+    # axis sci notation
+    if force_sci_x or force_sci_y:
+        ax.ticklabel_format(useOffset=False)
+        ax.ticklabel_format(style='sci',
+                            axis='x' if force_sci_x else 'y',
+                            scilimits=(0,0))
+
+    # set spine and tick width and color
+    axis_color = "lightgrey"
+    ax.spines["bottom"].set(linewidth=1.3, color=axis_color)
+    ax.spines["left"].set(linewidth=1.3, color=axis_color)
+    ax.xaxis.set_tick_params(width=1.3, color=axis_color)
+    yc = axis_color if y_spine else "white"
+    ax.yaxis.set_tick_params(width=1.3, color=yc)
+
+    if legend:
+        l = fig.legend(title=legend_title, fancybox=False, frameon=False, loc="outside lower center", ncols=legend_ncols)
+        # Shrink current axis's height by 10% on the bottom
+        p = legend_shrink # %
+        box = ax.get_position()
+        ax.set_position([box.x0, box.y0 + box.height * p,
+                         box.width, box.height * (1-p)])
+
+    if grid:
+        ax.grid(True, axis='y', alpha=0.2, linestyle='-')
+        ax.yaxis.set_tick_params(size=0)
 
 SETTINGS = {
     "SpaceInvaders": dict(
         ma_w_1=10,
         num_pts_sc=100,
-        sc_percent=1.0,
+        sc_percent=1.0, # 0.9?
         chunk_avg_w=30,
         ma_w_extra=30,
         ma_std_extra=10,
@@ -22,12 +65,15 @@ SETTINGS = {
     "Freeway": dict(
         ma_w_1=10,
         num_pts_sc=100,
-        sc_percent=1.0,
+        sc_percent=1.0, # 0.9?
         chunk_avg_w=30,
         ma_w_extra=10,
         ma_std_extra=None,
     ),
 }
+
+FAME = True
+FAME_PATH = "_FAME" if FAME else ""
 
 METHOD_NAMES = {
     "cnn-simple": "Baseline",
@@ -36,6 +82,8 @@ METHOD_NAMES = {
     "prog-net": "ProgressiveNet",
     "packnet": "PackNet",
 }
+if FAME:
+    METHOD_NAMES["FAME"] = "FAME"
 
 METHOD_COLORS = {
     "cnn-simple": "darkgray",
@@ -44,17 +92,29 @@ METHOD_COLORS = {
     "prog-net": "tab:green",
     "packnet": "tab:purple",
 }
+if FAME:
+    METHOD_COLORS["FAME"] = "tab:cyan"
 
-METHOD_ORDER = ["cnn-simple", "cnn-componet", "cnn-simple-ft", "prog-net", "packnet"]
+if FAME:
+    # METHOD_ORDER = ["cnn-simple", "cnn-componet", "cnn-simple-ft", "prog-net", "packnet", "FAME"]
+    METHOD_ORDER = ["cnn-simple",  "cnn-simple-ft", "prog-net", "packnet", "FAME"]
+else:
+    # METHOD_ORDER = ["cnn-simple", "cnn-componet", "cnn-simple-ft", "prog-net", "packnet"]
+    METHOD_ORDER = ["cnn-simple", "cnn-simple-ft", "prog-net", "packnet"]
 
 
 def parse_args():
     # fmt: off
     parser = argparse.ArgumentParser()
-    parser.add_argument("--data-dir", type=str, default="data/envs/Freeway",
-        choices=["data/envs/Freeway", "data/envs/SpaceInvaders"],
+    # parser.add_argument("--data-dir", type=str, default="data/envs/Freeway",
+    #                     choices=["data/envs/Freeway", "data/envs/SpaceInvaders"],
+    #                     help="path to the directory where the CSV of each task is stored")
+    # parser.add_argument("--eval-results", type=str, default="data/eval_results.csv",
+    #                     help="path to the file where the CSV with the evaluation results is located")
+    parser.add_argument("--data-dir", type=str, default="data_FAME/envs/Freeway", ########### need to be changed
+        choices=["data_FAME/envs/Freeway", "data_FAME/envs/SpaceInvaders"],
         help="path to the directory where the CSV of each task is stored")
-    parser.add_argument("--eval-results", type=str, default="data/eval_results.csv",
+    parser.add_argument("--eval-results", type=str, default="data_FAME/eval_results.csv",
         help="path to the file where the CSV with the evaluation results is located")
     # fmt: on
     return parser.parse_args()
@@ -85,6 +145,7 @@ def compute_success(
     ma_w_extra=30,
     ma_std_extra=10,
 ):
+    ############### evaluate the sucess score, extract the returan and boolean the success rate via comparison
     """Takes the DataFrame of the CSV file form W&B and returns a new
     dataframe with the success of each algorithm in every timestep.
 
@@ -106,7 +167,7 @@ def compute_success(
     ma_std_extra -- Window size of the extra MA applied to the std of
                     the success curves.
     """
-    data_cols = df.columns[df.columns.str.endswith("episodic_return")]
+    data_cols = df.columns[df.columns.str.endswith("episodic_return")] # extract the average returns of all methods
     # get the name of the method from the column's name
     methods = [col.split(" ")[1] for col in data_cols]
 
@@ -117,6 +178,7 @@ def compute_success(
     rets = []
     returns = {}
     for method, col in zip(methods, data_cols):
+        # x: steps, y: returns
         x, y = df["global_step"].values, df[col].values
         x, y = remove_nan(x, y)
 
@@ -126,12 +188,13 @@ def compute_success(
 
         rets.append(y[:-num_pts_sc].mean())
 
+    # a baseline average return: 0.8 * rets across all methods
     success_score = sc_percent * np.mean(rets)
 
     data = {}
     for method in methods:
         x, y = returns[method]
-        y = y >= success_score
+        y = y >= success_score # success rate
 
         x, _ = chunk_average(x, w=chunk_avg_w)
         y, y_std = chunk_average(y, w=chunk_avg_w)
@@ -184,6 +247,7 @@ def compute_success(
 
 
 def compute_forward_transfer(data):
+    """"data: """
     baseline_method = "cnn-simple"
     methods = list(METHOD_NAMES.keys())
 
@@ -242,15 +306,13 @@ def compute_forward_transfer(data):
             val = round(ft_data[task_id][method], 2)
             row.append(val)
         table.append(row)
-    table.append([None] * len(method))
+    table.append([None] * len(methods))
 
     # compute the average and std FT of every method
     avgs = []
     for method in methods:
         method_avg = []
-        for task_id in sorted(ft_data.keys())[
-            1:
-        ]:  # ignore the first task to compute the avg. ft
+        for task_id in sorted(ft_data.keys())[1:]:  # ignore the first task to compute the avg. ft
             method_avg.append(ft_data[task_id][method])
         mean = round(np.mean(method_avg), 2)
         std = round(np.std(method_avg), 2)
@@ -270,28 +332,32 @@ def compute_forward_transfer(data):
 
 
 def compute_final_performance(data):
+    """"
+    Computes the final performance of each method in every task and prints it in a table (note that the final performance is not average performance)
+    """
     methods = list(METHOD_NAMES.keys())
     table = []
     for task_id in sorted(data.keys()):
         row = [task_id]
         for i, method in enumerate(methods):
-            val = round(data[task_id][method]["final_success"], 2)
+            val = round(data[task_id][method]["final_success"], 2) # only evaluate the final success rate (the last average sucess rate / performance)
             row.append(val)
         table.append(row)
-    table.append([None] * len(method))
+    table.append([None] * len(methods))
 
+    # further evaluate the average and std across all task_id
     avgs = []
-    for j in range(1, len(table[0])):  # skip task id's column
+    for j in range(1, len(table[0])):  # skip task id's column, loop over all methods
         m = []
-        for i in range(len(table) - 1):  # skip Nones row
-            m.append(table[i][j])
+        for i in range(len(table) - 1):  # skip Nones row, loop over all  task_id
+            m.append(table[i][j]) # [task_id][method]
         mean = round(np.mean(m), 2)
         std = round(np.std(m), 2)
         avgs.append(f"{mean} ({std})")
 
     table.append(["Avg."] + avgs)
 
-    print("\n\n----- PERFORMANCE -----\n")
+    print("\n\n----- PERFORMANCE on Each Task (not Average Performance) -----\n")
     print(
         tabulate(
             table,
@@ -305,6 +371,12 @@ def compute_final_performance(data):
 
 
 def process_eval(df, data, success_scores, env):
+    # read the baseline method's performance
+    """
+    => after the evaluation on the past environments, we have the eval_results.csv file, based on that file, we calculate the average performance of each method
+    Final performance of the Baseline method:
+    Final performance of the FT method:
+    """
     eval_results = {}
     for method in df["algorithm"].unique():
         print(
@@ -456,24 +528,36 @@ def plot_data(data, save_name="plot.pdf", total_timesteps=1e6):
 if __name__ == "__main__":
     args = parse_args()
 
-    env = os.path.basename(args.data_dir)
+    env = os.path.basename(args.data_dir) # data_FAME/envs/SpaceInvaders
 
-    #
-    # Compute the success curve of each method in every task
-    #
+    """Step 1: Compute the success curve of each method in every task"""
     data = {}
     scores = {}
     for path in pathlib.Path(args.data_dir).glob("*.csv"):
-        task_id = int(str(path)[:-4].split("_")[-1])  # obtain task ID from the path
 
-        df = pd.read_csv(path)
+        ###################### do not process the seed files， only work on FAME results
+        if str(path)[-9:-5] == "seed":
+            continue
+        if FAME and str(path)[-8:-4] != "FAME":
+            continue
 
+        if FAME:
+            task_id = int(str(path)[:-4].split("_")[-2])
+        else:
+            task_id = int(str(path)[:-4].split("_")[-1])  # obtain task ID from the path
+
+        df = pd.read_csv(path) # (110089, 32)
+        # load the setting for the specific game
         cfg = dict()
         for k in SETTINGS.keys():
             if k in str(path):
                 cfg = SETTINGS[k]
                 break
-
+        """
+        data_task.keys() = dict_keys(['prog-net', 'cnn-simple-ft', 'cnn-componet', 'packnet', 'cnn-simple', 'FAME'])
+        data_task['prog-net'] = ["global_step", "success", "std_high", "std_low", "std_x", "final_success", "final_success_std"] (3716,)
+        success_score: a scalar
+        """
         data_task, success_score = compute_success(df, **cfg)
         data[task_id] = data_task
         scores[task_id] = success_score
@@ -481,26 +565,32 @@ if __name__ == "__main__":
     print("\n** Success scores used:")
     [print(round(scores[t], 2), end=" ") for t in sorted(scores.keys())]
     print()
-    #
-    # Compute forward transfer & final performance
-    #
-    if os.path.exists(args.eval_results):
+
+    """Step 2: evaluate the average performance of the baseline/FT method"""
+    if os.path.exists(args.eval_results): # read the baseline method's performance
         eval_results = process_eval(
             pd.read_csv(args.eval_results), data, scores, f"ALE/{env}-v5"
         )
     else:
         eval_results = None
 
+    """Step 3: Compute forward transfer & final performance"""
     ft_data = compute_forward_transfer(data)
     compute_final_performance(data)
 
-    fname = f"summary_data_{env}.csv"
+    fname = f"summary_data_{env}{FAME_PATH}.csv"
     with open(fname, "w") as f:
         f.write("env,method,task id,perf,perf std,ft,forg,forg std\n")
         for task_id in sorted(list(data.keys())):
             for method in data[0].keys():
                 ft = ft_data[task_id][method]
+                """"
+                IMPORTANT!!!!!!!!!: every method should evaluate to a eval_results.csv, and then evaluate the average performance
+                
+                for componet, we directly use the final_success rate, for FAME, we should evalute the average performance based on the meta learners.
+                """
                 if eval_results is not None and method in eval_results.keys():
+                    # for Finetune and Baseline methods
                     perf, perf_std = eval_results[method]["perf"][task_id]
                     forg, forg_std = eval_results[method]["forg"][task_id]
                     if METHOD_NAMES[method] == "Finetune":
@@ -510,6 +600,7 @@ if __name__ == "__main__":
                             f"{env},Finetune-N,{task_id},{n_perf},{n_perf_std},{ft},0,0\n"
                         )
                 else:
+                    """ should be very careful when we could use the final performance of the method in each method"""
                     perf = data[task_id][method]["final_success"]
                     perf_std = data[task_id][method]["final_success_std"]
                     forg, forg_std = 0, 0
@@ -522,4 +613,10 @@ if __name__ == "__main__":
     # Plotting
     #
     env = args.data_dir.split("/")[-1]
-    plot_data(data, save_name=f"success_curves_{env}.pdf")
+
+    with open(fname, "r") as f:
+        df_eval = pd.read_csv(f)
+        result = df_eval.iloc[:,1:].groupby(["method"]).mean()
+        print(result.round(2))
+
+    plot_data(data, save_name=f"success_curves_{env}{FAME_PATH}.pdf")
