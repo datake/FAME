@@ -190,10 +190,12 @@ Please contact ksun6@ualberta.ca if you have any questions.
 Please cite our paper if you use our implementation in your research:
 ```
 
-@inproceedings{sun2025principled,
-  title={Principled Fast and Meta Knowledge Learners for Continual Reinforcement Learning},
-  author={Sun, Ke and Zhang, Hongming and Jin, Jun and Gao, Chao and Chen, Xi and Liu, Wulong and Kong, Linglong},
-  booktitle={International Conference on Learning Representations},
-  year={2026}
+@inproceedings{
+sun2026principled,
+title={Principled Fast and Meta Knowledge Learners for Continual Reinforcement Learning},
+author={Ke Sun and Hongming Zhang and Jun Jin and Chao Gao and Xi Chen and Wulong Liu and Linglong Kong},
+booktitle={The Fourteenth International Conference on Learning Representations},
+year={2026},
+url={https://openreview.net/forum?id=loNTDX3wTn}
 }
 ```
